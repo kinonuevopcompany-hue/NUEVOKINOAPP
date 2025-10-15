@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generador de Clientes</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto p-6 max-w-2xl">
+        <div class="bg-white rounded-2xl shadow-lg p-8">
+            <h1 class="text-3xl font-bold mb-2 text-gray-800">Generador de Clientes</h1>
+            <p class="text-gray-600 mb-6">Completa este formulario para configurar un nuevo portal de cliente.</p>
+
+            <form id="generator-form" enctype="multipart/form-data">
+                <fieldset class="border-t pt-6 mb-6">
+                    <legend class="text-lg font-semibold text-gray-700 px-2">Identidad del Cliente</legend>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                        <div>
+                            <label for="client_name" class="block mb-1 font-medium">Nombre del Cliente</label>
+                            <input type="text" id="client_name" name="client_name" required class="w-full border rounded px-3 py-2" placeholder="Ej: Mi Empresa S.A.S">
+                        </div>
+                        <div>
+                            <label for="client_id" class="block mb-1 font-medium">Identificador URL (ID)</label>
+                            <input type="text" id="client_id" name="client_id" required class="w-full border rounded px-3 py-2" placeholder="Ej: miempresa (sin espacios)">
+                        </div>
+                    </div>
+                </fieldset>
+
+                <fieldset class="border-t pt-6 mb-6">
+                    <legend class="text-lg font-semibold text-gray-700 px-2">Base de Datos</legend>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                        <div>
+                            <label for="db_name" class="block mb-1 font-medium">Nombre de la BD</label>
+                            <input type="text" id="db_name" name="db_name" required class="w-full border rounded px-3 py-2" placeholder="if0_39064130_cliente_db">
+                        </div>
+                        <div>
+                            <label for="db_user" class="block mb-1 font-medium">Usuario de la BD</label>
+                            <input type="text" id="db_user" name="db_user" required class="w-full border rounded px-3 py-2" value="if0_39064130">
+                        </div>
+                        <div>
+                            <label for="db_pass" class="block mb-1 font-medium">Contraseña de la BD</label>
+                            <input type="password" id="db_pass" name="db_pass" required class="w-full border rounded px-3 py-2" placeholder="Contraseña segura">
+                        </div>
+                        <div>
+                            <label for="db_host" class="block mb-1 font-medium">Host de la BD</label>
+                            <input type="text" id="db_host" name="db_host" required class="w-full border rounded px-3 py-2" value="sql200.infinityfree.com">
+                        </div>
+                    </div>
+                </fieldset>
+
+                <fieldset class="border-t pt-6 mb-6">
+                    <legend class="text-lg font-semibold text-gray-700 px-2">Personalización Visual</legend>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                        <div>
+                            <label for="logo" class="block mb-1 font-medium">Logo del Cliente (.png)</label>
+                            <input type="file" id="logo" name="logo" required accept="image/png" class="w-full border rounded px-3 py-2">
+                        </div>
+                        <div>
+                            <label for="color_primary" class="block mb-1 font-medium">Color Principal</label>
+                            <input type="color" id="color_primary" name="color_primary" value="#DC2626" class="w-full h-10 border rounded">
+                        </div>
+                    </div>
+                </fieldset>
+
+                <button type="submit" id="submit-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg text-lg">
+                    Generar Cliente
+                </button>
+            </form>
+
+            <div id="response-message" class="mt-6 p-4 rounded-lg hidden"></div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('generator-form').addEventListener('submit', function(event) {
+            event.preventDefault();
+            const form = event.target;
+            const formData = new FormData(form);
+            const submitBtn = document.getElementById('submit-btn');
+            const responseMsg = document.getElementById('response-message');
+
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Generando...';
+            responseMsg.classList.add('hidden');
+
+            fetch('client-generator.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                responseMsg.classList.remove('hidden');
+                if (data.success) {
+                    responseMsg.className = 'mt-6 p-4 rounded-lg bg-green-100 text-green-800';
+                    responseMsg.innerHTML = `<strong>¡Éxito!</strong> Cliente creado correctamente. <br>Puedes acceder al portal en: <a href="${data.url}" target="_blank" class="font-bold underline">${data.url}</a>`;
+                    form.reset();
+                } else {
+                    responseMsg.className = 'mt-6 p-4 rounded-lg bg-red-100 text-red-800';
+                    responseMsg.innerHTML = `<strong>Error:</strong> ${data.error}`;
+                }
+            })
+            .catch(() => {
+                responseMsg.classList.remove('hidden');
+                responseMsg.className = 'mt-6 p-4 rounded-lg bg-red-100 text-red-800';
+                responseMsg.innerHTML = '<strong>Error:</strong> No se pudo conectar con el servidor.';
+            })
+            .finally(() => {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Generar Cliente';
+            });
+        });
+
+        document.getElementById('client_name').addEventListener('input', function() {
+            const name = this.value;
+            const id = name.toLowerCase()
+                           .trim()
+                           .replace(/\s+/g, '-')
+                           .replace(/[^\w\-]+/g, '')
+                           .replace(/\-\-+/g, '-');
+            document.getElementById('client_id').value = id;
+        });
+    </script>
+</body>
+</html>
