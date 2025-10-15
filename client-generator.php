@@ -1,100 +1,71 @@
 <?php
 header('Content-Type: application/json');
-
 try {
-    // 1. VALIDACIÓN DE DATOS
-    $required_fields = ['client_name', 'client_id', 'db_name', 'db_user', 'db_pass', 'db_host', 'color_primary'];
-    foreach ($required_fields as $field) {
+    // Lista de campos requeridos en el formulario
+    $required = ['client_name', 'client_id', 'admin_user', 'admin_pass', 'db_name', 'db_user', 'db_pass', 'db_host', 'color_primary'];
+    foreach ($required as $field) {
         if (empty($_POST[$field])) {
             throw new Exception("El campo '$field' es obligatorio.");
         }
     }
     if (!isset($_FILES['logo']) || $_FILES['logo']['error'] !== UPLOAD_ERR_OK) {
-        throw new Exception("El logo es obligatorio y debe subirse correctamente.");
+        throw new Exception("El logo es obligatorio.");
     }
 
-    // 2. SANITIZACIÓN DEL ID DEL CLIENTE
+    // Limpia el ID del cliente para que sea seguro para URL
     $client_id = preg_replace('/[^a-z0-9_-]/', '', strtolower(trim($_POST['client_id'])));
     if (empty($client_id)) {
-        throw new Exception("El Identificador URL (ID) no es válido.");
+        throw new Exception("El ID de cliente no es válido.");
     }
 
-    // 3. DEFINICIÓN DE RUTAS Y VERIFICACIÓN
-    $clientes_dir = __DIR__ . '/clientes/';
-    $client_dir   = $clientes_dir . $client_id . '/';
-    $uploads_dir  = __DIR__ . '/uploads/' . $client_id . '/';
-
+    // Define las rutas y comprueba si el cliente ya existe
+    $client_dir = __DIR__ . '/clientes/' . $client_id . '/';
     if (is_dir($client_dir)) {
         throw new Exception("El cliente con ID '$client_id' ya existe.");
     }
 
-    // 4. CREACIÓN DE CARPETAS
-    if (!mkdir($client_dir, 0775, true) || !mkdir($uploads_dir, 0775, true)) {
-        throw new Exception("No se pudieron crear las carpetas para el cliente. Verifica los permisos del servidor.");
-    }
+    // Crea las carpetas de configuración y de uploads
+    mkdir($client_dir, 0775, true);
+    mkdir(__DIR__ . '/uploads/' . $client_id . '/', 0775, true);
 
-    // 5. GESTIÓN DEL LOGO
-    $logo_info = getimagesize($_FILES['logo']['tmp_name']);
-    if (!$logo_info || $logo_info['mime'] !== 'image/png') {
-        throw new Exception("El logo debe ser un archivo .png válido.");
-    }
-    $logo_path = $client_dir . 'logo.png';
-    if (!move_uploaded_file($_FILES['logo']['tmp_name'], $logo_path)) {
+    // Mueve el logo a la carpeta del cliente
+    if (!move_uploaded_file($_FILES['logo']['tmp_name'], $client_dir . 'logo.png')) {
         throw new Exception("No se pudo guardar el logo.");
     }
     
-    // 6. GENERACIÓN DEL ARCHIVO config.php
-    function darken_color($hex, $percent = 20) {
-        $hex = ltrim($hex, '#');
-        $rgb = hexdec($hex);
-        $r = max(0, (($rgb >> 16) & 0xFF) * (1 - $percent / 100));
-        $g = max(0, (($rgb >> 8) & 0xFF) * (1 - $percent / 100));
-        $b = max(0, ($rgb & 0xFF) * (1 - $percent / 100));
-        return '#' . str_pad(dechex(($r << 16) | ($g << 8) | $b), 6, '0', STR_PAD_LEFT);
-    }
+    // Función para oscurecer el color para el efecto hover del botón
+    function darken_color($h, $p=20){$h=ltrim($h,'#');$c=hexdec($h);$r=max(0,($c>>16&0xFF)*(1-$p/100));$g=max(0,($c>>8&0xFF)*(1-$p/100));$b=max(0,($c&0xFF)*(1-$p/100));return'#'.str_pad(dechex($r<<16|$g<<8|$b),6,'0',STR_PAD_LEFT);}
+    $color_primary = $_POST['color_primary']; 
+    $color_hover = darken_color($color_primary);
     
-    $color_primary = $_POST['color_primary'];
-    $color_hover   = darken_color($color_primary);
+    // Crea un hash seguro para la contraseña del admin
+    $admin_pass_hash = password_hash($_POST['admin_pass'], PASSWORD_DEFAULT);
     
+    // Genera el contenido del archivo de configuración
     $config_content = "<?php
 // Configuración para el Cliente \"" . htmlspecialchars($_POST['client_name']) . "\"
-// Generado automáticamente el " . date('Y-m-d H:i:s') . "
-
 return [
-    'db' => [
-        'host'   => '" . addslashes($_POST['db_host']) . "',
-        'dbname' => '" . addslashes($_POST['db_name']) . "',
-        'user'   => '" . addslashes($_POST['db_user']) . "',
-        'pass'   => '" . addslashes($_POST['db_pass']) . "',
-        'port'   => 3306
-    ],
-    'branding' => [
-        'client_name' => '" . addslashes($_POST['client_name']) . "',
-        'logo_path'   => '../clientes/" . $client_id . "/logo.png',
-        'colors' => [
-            'primary'       => '" . addslashes($color_primary) . "',
-            'primary_hover' => '" . addslashes($color_hover) . "',
-        ]
-    ]
-];
-";
-    if (file_put_contents($client_dir . 'config.php', $config_content) === false) {
-        throw new Exception("No se pudo escribir el archivo de configuración.");
-    }
+    'db' => ['host'=>'" . addslashes($_POST['db_host']) . "','dbname'=>'" . addslashes($_POST['db_name']) . "','user'=>'" . addslashes($_POST['db_user']) . "','pass'=>'" . addslashes($_POST['db_pass']) . "'],
+    'branding' => ['client_name'=>'" . addslashes($_POST['client_name']) . "','logo_path'=>'../clientes/" . $client_id . "/logo.png','colors'=>['primary'=>'" . $color_primary . "','primary_hover'=>'" . $color_hover . "']],
+    'admin' => ['user'=>'" . addslashes($_POST['admin_user']) . "','pass_hash'=>'" . $admin_pass_hash . "']
+];";
     
-    // 7. RESPUESTA DE ÉXITO
-    $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https://" : "http://";
-    $host     = $_SERVER['HTTP_HOST'];
-    $base_uri = rtrim(dirname($_SERVER['REQUEST_URI']), '/\\');
+    // Escribe el archivo de configuración
+    file_put_contents($client_dir . 'config.php', $config_content);
     
+    // Genera las URLs de respuesta
+    $protocol = (!empty($_SERVER['HTTPS'])&&$_SERVER['HTTPS']!=='off')?"https":"http://";
+    $host = $_SERVER['HTTP_HOST']; 
+    $base_uri = rtrim(dirname($_SERVER['REQUEST_URI']),'/\\');
+    
+    // Envía la respuesta de éxito
     echo json_encode([
         'success' => true,
-        'message' => 'Cliente creado exitosamente.',
-        'url'     => $protocol . $host . $base_uri . '/bc/' . $client_id . '/'
+        'public_url' => $protocol . $host . $base_uri . '/bc/' . $client_id . '/',
+        'admin_url' => $protocol . $host . $base_uri . '/admin/' . $client_id . '/'
     ]);
-
 } catch (Exception $e) {
-    // MANEJO DE ERRORES
-    http_response_code(400);
+    // Envía la respuesta de error si algo falla
+    http_response_code(400); 
     echo json_encode(['success' => false, 'error' => $e->getMessage()]);
 }

@@ -58,6 +58,8 @@ $is_logged_in = isset($_SESSION['user_logged_in']) && $_SESSION['user_logged_in'
 <?php endif; ?>
 
 <script>
+    // --- LÍNEA CORREGIDA ---
+    // Usamos '../api.php' para "subir un nivel" desde /admin/ a la raíz.
     const apiClient = `../api.php?client=<?php echo $client_id; ?>`;
     
     <?php if (!$is_logged_in): ?>
